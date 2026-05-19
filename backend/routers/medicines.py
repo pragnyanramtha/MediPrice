@@ -2,29 +2,32 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
 from database import supabase
+from functools import lru_cache
 import random
 import time
 import urllib.request
 import json
 
-LAST_IP_LAT = 18.5204
-LAST_IP_LON = 73.8567
-IP_FETCHED = False
+DEFAULT_LOCATION = (18.5204, 73.8567)
+
+
+@lru_cache(maxsize=1)
+def _fetch_ip_location():
+    req = urllib.request.Request(
+        "http://ip-api.com/json/",
+        headers={'User-Agent': 'Mozilla/5.0'}
+    )
+    with urllib.request.urlopen(req, timeout=2) as response:
+        data = json.loads(response.read().decode())
+        return float(data["lat"]), float(data["lon"])
+
 
 def get_default_location():
-    global LAST_IP_LAT, LAST_IP_LON, IP_FETCHED
-    if IP_FETCHED:
-        return LAST_IP_LAT, LAST_IP_LON
     try:
-        req = urllib.request.Request("http://ip-api.com/json/", headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=2) as response:
-            data = json.loads(response.read().decode())
-            LAST_IP_LAT = data["lat"]
-            LAST_IP_LON = data["lon"]
-            IP_FETCHED = True
-            return LAST_IP_LAT, LAST_IP_LON
+        return _fetch_ip_location()
     except Exception:
-        return 18.5204, 73.8567
+        return DEFAULT_LOCATION
+
 
 def fetch_real_pharmacies(lat, lon):
     import urllib.parse
