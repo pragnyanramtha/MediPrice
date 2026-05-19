@@ -41,11 +41,9 @@ class _BaseModel:
 fastapi_module = types.ModuleType("fastapi")
 fastapi_module.APIRouter = _APIRouter
 fastapi_module.HTTPException = _HTTPException
-sys.modules.setdefault("fastapi", fastapi_module)
 
 pydantic_module = types.ModuleType("pydantic")
 pydantic_module.BaseModel = _BaseModel
-sys.modules.setdefault("pydantic", pydantic_module)
 
 database_module = types.ModuleType("database")
 database_module.supabase = object()
@@ -64,6 +62,10 @@ with mock.patch.dict(
 class DefaultLocationCacheTest(unittest.TestCase):
     def setUp(self):
         medicines._fetch_ip_location.cache_clear()
+
+    def test_dependency_stubs_are_scoped_to_import(self):
+        self.assertIsNot(sys.modules.get("fastapi"), fastapi_module)
+        self.assertIsNot(sys.modules.get("pydantic"), pydantic_module)
 
     def test_default_location_fetch_is_cached_without_mutable_globals(self):
         response = mock.Mock()
