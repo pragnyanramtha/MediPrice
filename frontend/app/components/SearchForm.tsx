@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -8,15 +8,19 @@ import { cn } from "@/lib/utils";
 
 export function SearchForm() {
   const [query, setQuery] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isPending, startTransition] = useTransition();
   const router = useRouter();
+  const trimmedQuery = query.trim();
+  const canSearch = trimmedQuery.length > 0;
+  const isSearchEnabled = canSearch && !isPending;
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!query.trim()) return;
-    setIsLoading(true);
-    // Simple routing to search page with query
-    router.push(`/search?q=${encodeURIComponent(query.trim())}`);
+    if (!canSearch) return;
+
+    startTransition(() => {
+      router.push(`/search?q=${encodeURIComponent(trimmedQuery)}`);
+    });
   };
 
   return (
@@ -44,15 +48,23 @@ export function SearchForm() {
         <div className="px-2 pb-2 sm:pb-0 sm:pr-2 sm:pl-2">
           <button
             type="submit"
-            disabled={isLoading || !query.trim()}
+            disabled={!isSearchEnabled}
+            aria-label={isPending ? "Searching" : "Compare"}
             className={cn(
               "w-full sm:w-auto h-11 sm:h-12 px-6 rounded-xl sm:rounded-full font-semibold transition-all flex items-center justify-center sm:min-w-[120px]",
-              query.trim()
+              isSearchEnabled
                 ? "bg-primary text-primary-foreground hover:bg-primary/90 hover:scale-105 active:scale-95 cursor-pointer shadow-lg shadow-primary/20"
                 : "bg-muted text-muted-foreground cursor-not-allowed"
             )}
           >
-            {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Compare"}
+            {isPending ? (
+              <>
+                <Loader2 aria-hidden="true" className="w-5 h-5 animate-spin" />
+                <span className="sr-only">Searching</span>
+              </>
+            ) : (
+              "Compare"
+            )}
           </button>
         </div>
       </div>
