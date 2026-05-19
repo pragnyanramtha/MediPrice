@@ -3,23 +3,40 @@ from pydantic import BaseModel
 from typing import List, Optional
 from database import supabase
 from functools import lru_cache
+import math
 import random
 import time
 import urllib.request
 import json
 
 DEFAULT_LOCATION = (18.5204, 73.8567)
+IP_LOCATION_URL = "https://ipwho.is/"
+
+
+def _parse_location(data):
+    if data.get("success") is False:
+        raise ValueError("IP location lookup was not successful")
+    lat = float(data.get("latitude", data.get("lat")))
+    lon = float(data.get("longitude", data.get("lon")))
+    if not (
+        math.isfinite(lat)
+        and math.isfinite(lon)
+        and -90 <= lat <= 90
+        and -180 <= lon <= 180
+    ):
+        raise ValueError("IP location response contains invalid coordinates")
+    return lat, lon
 
 
 @lru_cache(maxsize=1)
 def _fetch_ip_location():
     req = urllib.request.Request(
-        "http://ip-api.com/json/",
+        IP_LOCATION_URL,
         headers={'User-Agent': 'Mozilla/5.0'}
     )
     with urllib.request.urlopen(req, timeout=2) as response:
         data = json.loads(response.read().decode())
-        return float(data["lat"]), float(data["lon"])
+        return _parse_location(data)
 
 
 def get_default_location():

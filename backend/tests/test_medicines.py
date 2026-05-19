@@ -7,7 +7,19 @@ from unittest import mock
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(BACKEND_DIR))
+BACKEND_DIR_STR = str(BACKEND_DIR)
+ADDED_BACKEND_PATH = BACKEND_DIR_STR not in sys.path
+if ADDED_BACKEND_PATH:
+    sys.path.insert(0, BACKEND_DIR_STR)
+
+
+def _cleanup_import_state():
+    sys.modules.pop("routers.medicines", None)
+    if ADDED_BACKEND_PATH and BACKEND_DIR_STR in sys.path:
+        sys.path.remove(BACKEND_DIR_STR)
+
+
+unittest.addModuleCleanup(_cleanup_import_state)
 
 
 class _APIRouter:
@@ -37,9 +49,16 @@ sys.modules.setdefault("pydantic", pydantic_module)
 
 database_module = types.ModuleType("database")
 database_module.supabase = object()
-sys.modules.setdefault("database", database_module)
 
-medicines = importlib.import_module("routers.medicines")
+with mock.patch.dict(
+    sys.modules,
+    {
+        "fastapi": fastapi_module,
+        "pydantic": pydantic_module,
+        "database": database_module,
+    },
+):
+    medicines = importlib.import_module("routers.medicines")
 
 
 class DefaultLocationCacheTest(unittest.TestCase):
@@ -48,7 +67,7 @@ class DefaultLocationCacheTest(unittest.TestCase):
 
     def test_default_location_fetch_is_cached_without_mutable_globals(self):
         response = mock.Mock()
-        response.read.return_value = b'{"lat": 12.34, "lon": 56.78}'
+        response.read.return_value = b'{"latitude": 12.34, "longitude": 56.78}'
 
         with mock.patch.object(medicines.urllib.request, "urlopen") as urlopen:
             urlopen.return_value.__enter__.return_value = response
@@ -63,7 +82,7 @@ class DefaultLocationCacheTest(unittest.TestCase):
 
     def test_default_location_falls_back_without_caching_failure(self):
         response = mock.Mock()
-        response.read.return_value = b'{"lat": 23.45, "lon": 67.89}'
+        response.read.return_value = b'{"latitude": 23.45, "longitude": 67.89}'
         successful_lookup = mock.MagicMock()
         successful_lookup.__enter__.return_value = response
 
@@ -76,6 +95,15 @@ class DefaultLocationCacheTest(unittest.TestCase):
             self.assertEqual(medicines.get_default_location(), (23.45, 67.89))
 
         self.assertEqual(urlopen.call_count, 2)
+
+    def test_default_location_rejects_invalid_coordinates(self):
+        response = mock.Mock()
+        response.read.return_value = b'{"latitude": 1000, "longitude": 67.89}'
+
+        with mock.patch.object(medicines.urllib.request, "urlopen") as urlopen:
+            urlopen.return_value.__enter__.return_value = response
+
+            self.assertEqual(medicines.get_default_location(), medicines.DEFAULT_LOCATION)
 
 
 if __name__ == "__main__":
